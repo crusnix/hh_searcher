@@ -440,13 +440,7 @@ def render_keyword_extraction_page():
 
 # --- Основное приложение ---
 def main():
-    with st.sidebar:
-       st.markdown('<h1 class="sidebar-header">ForteTalent</h1>', unsafe_allow_html=True)
-       st.markdown("---")
-       page_options = ["Поиск HH", "Сопоставление", "База данных", "Отклики"]
-       
-       st.session_state.app_page = st.radio("Навигация:", page_options)
-       st.markdown("---")
+    
     fetch_initial_data()
     
     if st.session_state.hh_selected_vacancy_id:
