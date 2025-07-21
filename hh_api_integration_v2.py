@@ -14,7 +14,7 @@ load_dotenv()
 def get_access_token():
     token = os.getenv("ACCESS_TOKEN")
     if not token:
-        st.error("Токен доступа HH_ACCESS_TOKEN не найден в .env файле.")
+        st.error("Токен доступа ACCESS_TOKEN не найден в .env файле.")
     return token
 
 def get_current_user_info():
