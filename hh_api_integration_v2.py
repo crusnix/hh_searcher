@@ -7,6 +7,7 @@ import json
 from dotenv import load_dotenv
 import time
 from urllib.parse import urlencode, unquote_plus
+import re
 
 load_dotenv()
 
@@ -112,10 +113,47 @@ def get_vacancy_details(vacancy_id):
             else: st.error(f"Не удалось получить детали вакансии: {e}")
     return None
 
-# --- ИЗМЕНЕНИЕ: Функции для OpenAI и Поиска ---
+def clean_vacancy_description(html_description):
+    """
+    Очищает HTML-описание вакансии от стандартных шаблонных блоков ForteBank
+    с помощью регулярных выражений.
+    """
+    if not html_description:
+        return "", ""
 
-@st.cache_data(show_spinner="Анализ вакансии с помощью AI...")
-# hh_api_integration_v2.py
+    soup = BeautifulSoup(html_description, 'html.parser')
+    
+    # Сохраняем оригинальный, красиво отформатированный HTML для отображения
+    original_html_pretty = soup.prettify()
+
+    # Извлекаем чистый текст для обработки
+    text_content = soup.get_text(separator='\n', strip=True)
+
+    # Шаблоны для поиска и удаления блоков на русском и казахском языках
+    # re.DOTALL позволяет точке (.) соответствовать символу новой строки
+    # re.IGNORECASE делает поиск нечувствительным к регистру
+    
+    # 1. Удаляем блок "Что такое ForteBank?"
+    # Ищем от заголовка до следующего потенциального заголовка
+    pattern_about = re.compile(
+        r"(Что такое ForteBank\?|ForteBank дегеніміз не\?).*?(?=(Обязанности|Требования|Талаптар|Міндеттері|Сіз Forte|Став частью|$))",
+        re.DOTALL | re.IGNORECASE
+    )
+    
+    # 2. Удаляем блок "Став частью команды..."
+    # Ищем от заголовка до конца текста
+    pattern_perks = re.compile(
+        r"(Став частью команды Forte|Сіз Forte командасына қосыла отырып).*$",
+        re.DOTALL | re.IGNORECASE
+    )
+
+    cleaned_text = re.sub(pattern_about, '', text_content)
+    cleaned_text = re.sub(pattern_perks, '', cleaned_text)
+    
+    # Убираем лишние пустые строки, которые могли остаться после удаления блоков
+    cleaned_text = re.sub(r'\n\s*\n', '\n', cleaned_text).strip()
+
+    return cleaned_text, original_html_pretty
 
 @st.cache_data(show_spinner="Анализ вакансии с помощью AI...")
 def generate_keywords_with_openai(vacancy_name, vacancy_description_html):

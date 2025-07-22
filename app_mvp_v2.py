@@ -18,11 +18,8 @@ st.markdown("""
     .vacancy-card {
         background-color: #FFFFFF; border: 1px solid #E0E1DD; border-radius: 12px;
         padding: 20px; margin-bottom: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        transition: transform 0.2s, box-shadow 0.2s;
-        height: 200px; /* Немного увеличим высоту для города */
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
+        transition: transform 0.2s, box-shadow 0.2s; height: 220px;
+        display: flex; flex-direction: column; justify-content: space-between;
     }
     .vacancy-card:hover { transform: translateY(-5px); box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
     .vacancy-title { font-size: 1.1rem; font-weight: bold; color: #1B263B; margin-bottom: 0.5rem; }
@@ -31,6 +28,21 @@ st.markdown("""
     .stButton>button { border-radius: 8px; border: 1px solid #415A77; background-color: #415A77; color: white; padding: 0.5rem 1.25rem; font-weight: 600; }
     .stButton>button:hover { background-color: #1B263B; border-color: #1B263B; color: white; }
     mark { background-color: #FFF9C4; padding: 0.2em; border-radius: 3px;}
+    .stBadge { background-color: #e8f5e9; color: #2e7d32; padding: 3px 8px; border-radius: 16px; font-size: 0.85rem; font-weight: 600; }
+    
+    /* ИЗМЕНЕНИЕ: Стили для нового layout */
+    .scrollable-container {
+        border: 1px solid #e9e9e9;
+        background-color: #fafafa;
+        border-radius: 12px;
+        padding: 1rem;
+        height: 445px; /* Фиксированная высота для соответствия левому блоку */
+        overflow-y: auto; /* Включаем вертикальный скролл */
+    }
+    .compact-text p, .compact-text li, .compact-text ul, .compact-text ol, .compact-text h3 {
+        margin-bottom: 0.4rem !important;
+        line-height: 1.4 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -67,9 +79,11 @@ def highlight_snippet(text):
 def display_vacancy_card(vacancy):
     with st.container(border=True):
         city = vacancy.get('area', {}).get('name', 'Город не указан')
+        responses_count = vacancy.get('counters', {}).get('responses', 0)
         st.markdown(f'<div class="vacancy-card"><div>'
                     f'<p class="vacancy-title">{vacancy["name"]}</p>'
-                    f'<span style="color: #778DA9; font-size: 0.9em;">📍 {city}</span>'
+                    f'<span style="color: #778DA9; font-size: 0.9em;">📍 {city}</span><br>'
+                    f'<span style="color: #778DA9; font-size: 0.9em;">📥 Отклики: {responses_count}</span>'
                     f'</div>', unsafe_allow_html=True)
         if st.button("Найти кандидатов", key=f"process_hh_{vacancy['id']}", use_container_width=True):
             st.session_state.hh_selected_vacancy_id = vacancy['id']
@@ -134,22 +148,16 @@ def render_home_page():
         st.rerun()
 
     # --- ИЗМЕНЕНИЕ: Панель фильтров и сортировки ---
-    st.markdown("#### Фильтры и сортировка")
+    st.markdown("#### Поиск и фильтрация")
     with st.container(border=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            search_query = st.text_input("Поиск по названию вакансии:")
-            
-            # Динамически создаем список городов для фильтра
+        search_query = st.text_input("Поиск по названию вакансии:", label_visibility="collapsed", placeholder="Введите название вакансии для поиска...")
+        
+        filter_cols = st.columns(2)
+        with filter_cols[0]:
             cities = sorted(list(set(v.get('area', {}).get('name') for v in st.session_state.hh_active_vacancies if v.get('area', {}).get('name'))))
             selected_cities = st.multiselect("Фильтр по городам:", options=cities)
-
-        with col2:
-            sort_option = st.selectbox(
-                "Сортировать по:",
-                options=["Дате публикации (новые сначала)", "Названию (А-Я)", "Количеству откликов", "Непрочитанным откликам"],
-                help="Сортировка применяется к отфильтрованному списку вакансий."
-            )
+        with filter_cols[1]:
+            sort_option = st.selectbox("Сортировать по:", options=["Дате публикации (новые сначала)", "Названию (А-Я)", "Количеству откликов", "Непрочитанным откликам"])
 
     # Логика фильтрации и сортировки
     vacancies_to_display = st.session_state.hh_active_vacancies
@@ -317,11 +325,40 @@ def render_keyword_extraction_page():
         st.session_state.search_page_number = 0
         st.rerun()
 
-    st.markdown(f"## {vacancy_details.get('name')}")
-    st.caption(f"Требуемый опыт: **{vacancy_details.get('experience', {}).get('name', 'Не указан')}**")
+    col_keywords, col_description = st.columns([6, 5]) # Левая колонка чуть шире
 
-    with st.expander("Показать/скрыть описание вакансии"):
-        st.markdown(BeautifulSoup(vacancy_details.get('description', ''), 'html.parser').prettify(), unsafe_allow_html=True)
+    with col_keywords:
+        st.markdown('<div class="sub-header">Параметры поиска</div>', unsafe_allow_html=True)
+        st.markdown(f"### {vacancy_details.get('name')}")
+        st.caption(f"Требуемый опыт: **{vacancy_details.get('experience', {}).get('name', 'Не указан')}**")
+        if st.session_state.structured_keywords is None:
+            st.session_state.structured_keywords = hh.generate_keywords_with_openai(
+                vacancy_details.get("name", ""), vacancy_details.get("description", ""))
+        keywords = st.session_state.structured_keywords or {}
+
+        st.markdown("#### Шаг 1: Ключевые слова (сгенерировано AI)")
+        with st.container(border=True):
+            st.info("Вы можете отредактировать список слов (разделяйте запятой)")
+            keywords['must_have'] = st.text_input("Обязательные (технологии)", ", ".join(keywords.get('must_have', [])), key=f"must_{vacancy_id}").split(',')
+            keywords['technologies'] = st.text_input("Технологии (дополнительно)", ", ".join(keywords.get('technologies', [])), key=f"tech_{vacancy_id}").split(',')
+            keywords['domain'] = st.text_input("Сфера/Домен", ", ".join(keywords.get('domain', [])), key=f"domain_{vacancy_id}").split(',')
+            keywords['negative_keywords'] = st.text_input("Минус-слова", ", ".join(keywords.get('negative_keywords', [])), key=f"neg_{vacancy_id}").split(',')
+            for k in keywords: keywords[k] = [item.strip() for item in keywords[k] if item.strip()]
+            st.session_state.structured_keywords = keywords
+        
+        
+    with col_description:
+        #st.markdown('<div class="sub-header">Описание вакансии</div>', unsafe_allow_html=True)
+        st.markdown("<br><br><br><br><br><br><br><br><br>", unsafe_allow_html=True)
+        # ИЗМЕНЕНИЕ: Контейнер с фиксированной высотой и скроллом
+        description_html_content = BeautifulSoup(vacancy_details.get('description', ''), 'html.parser').prettify()
+
+        st.markdown(
+            f'<div class="scrollable-container compact-text">{description_html_content}</div>', 
+            unsafe_allow_html=True
+        )
+        
+
 
     if st.session_state.structured_keywords is None:
         st.session_state.structured_keywords = hh.generate_keywords_with_openai(
@@ -329,34 +366,28 @@ def render_keyword_extraction_page():
     
     keywords = st.session_state.structured_keywords
     if not keywords: st.error("Не удалось сгенерировать ключевые слова."); return
-
-    st.markdown("#### Шаг 1: Ключевые слова (сгенерировано AI)")
-    with st.container(border=True):
-        st.info("AI-помощник для расширения поиска. Можно оставить пустыми.")
-        keywords['must_have'] = st.text_input("Обязательные (технологии)", ", ".join(keywords.get('must_have', [])), key=f"must_{vacancy_id}").split(',')
-        keywords['technologies'] = st.text_input("Технологии (дополнительно)", ", ".join(keywords.get('technologies', [])), key=f"tech_{vacancy_id}").split(',')
-        keywords['domain'] = st.text_input("Сфера/Домен", ", ".join(keywords.get('domain', [])), key=f"domain_{vacancy_id}").split(',')
-        keywords['negative_keywords'] = st.text_input("Минус-слова", ", ".join(keywords.get('negative_keywords', [])), key=f"neg_{vacancy_id}").split(',')
-        for k in keywords: keywords[k] = [item.strip() for item in keywords[k] if item.strip()]
-        st.session_state.structured_keywords = keywords
     
-    st.markdown("#### Шаг 2: Основные фильтры и режим поиска")
-    search_mode = st.radio("Режим поиска AI-ключевых слов:", ["Строгий", "Средний", "Обширный"], index=1, horizontal=True)
-    
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([6,5])
     with col1:
+        st.markdown("#### Шаг 2: Основные фильтры и режим поиска")
+        search_mode = st.radio("Режим поиска AI-ключевых слов:", ["Строгий", "Средний"], index=1, horizontal=True)
+
         st.markdown("##### **Точные критерии**")
         user_job_title = st.text_input("Название должности:", placeholder="Например: Java-разработчик")
         bank_only = st.checkbox("Искать только с опытом работы в банке")
-        
+
         st.markdown("##### **Квалификация**")
-        experience = st.multiselect("Опыт работы:", ["noExperience", "between1And3", "between3And6", "moreThan6"], default=["between3And6"], format_func=lambda x: {"noExperience": "Нет", "between1And3": "1-3", "between3And6": "3-6", "moreThan6": "6+"}.get(x, x))
-        
+        experience_options = ["noExperience", "between1And3", "between3And6", "moreThan6"]
+        default_exp_id = vacancy_details.get('experience', {}).get('id')
+        default_exp = [default_exp_id] if default_exp_id in experience_options else []
+        experience = st.multiselect("Опыт работы:", experience_options, default=default_exp, format_func=lambda x: {"noExperience": "Нет", "between1And3": "1-3", "between3And6": "3-6", "moreThan6": "6+"}.get(x, x))
+
         education_levels = st.multiselect("Образование:",
             options=['higher', 'bachelor', 'master', 'special_secondary', 'secondary', 'unfinished_higher', 'candidate', 'doctor'], default=['higher', 'bachelor','master','candidate', 'doctor'],
             format_func=lambda x: {'higher': 'Высшее', 'bachelor': 'Бакалавр', 'master': 'Магистр', 'special_secondary': 'Среднее спец.', 'secondary' : 'Среднее',
                                    'unfinished_higher':'Неоконченное высшее','candidate':'Кандидат наук','doctor':'Доктор наук'}.get(x,x))
     with col2:
+        st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
         st.markdown("##### **Локация и Языки**")
         # --- ИЗМЕНЕНИЕ: Мультиселект для регионов ---
         kz_areas_dict = hh.get_area_dictionary()
@@ -365,7 +396,7 @@ def render_keyword_extraction_page():
         default_selection = [default_area_name] if default_area_name in area_options else []
         selected_area_names = st.multiselect("Регионы поиска:", options=area_options, default=default_selection)
         
-        languages = st.multiselect("Знание языков:", ['rus', 'kaz', 'eng'], format_func=lambda x: {'rus': 'Русский', 'kaz': 'Казахский', 'eng': 'Английский'}.get(x,x))
+        languages = st.multiselect("Знание языков:", ['rus', 'kaz', 'eng'], default = ['rus','kaz'],format_func=lambda x: {'rus': 'Русский', 'kaz': 'Казахский', 'eng': 'Английский'}.get(x,x))
 
         st.markdown("##### **Статус**")
         job_search_status = st.multiselect("Статус поиска:", ['active_search', 'looking_for_offers', 'has_job_offer'], default=['active_search', 'looking_for_offers'], format_func=lambda x: {'active_search': 'Активный', 'looking_for_offers': 'Рассматривает', 'has_job_offer': 'Есть оффер'}.get(x, x))
@@ -440,7 +471,13 @@ def render_keyword_extraction_page():
 
 # --- Основное приложение ---
 def main():
-    
+    #with st.sidebar:
+    #   st.markdown('<h1 class="sidebar-header">ForteTalent</h1>', unsafe_allow_html=True)
+    #   st.markdown("---")
+    #   page_options = ["Поиск HH", "Сопоставление", "База данных", "Отклики"]
+       
+    #   st.session_state.app_page = st.radio("Навигация:", page_options)
+    #   st.markdown("---")
     fetch_initial_data()
     
     if st.session_state.hh_selected_vacancy_id:
