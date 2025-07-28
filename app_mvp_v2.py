@@ -403,15 +403,6 @@ def render_keyword_extraction_page():
     if st.button("🚀 Найти кандидатов", use_container_width=True, type="primary"):
         st.session_state.search_page_number = 0 # Reset to first page on a new search
         trigger_search(st.session_state.search_page_number)
-
-        selected_area_ids = [kz_areas_dict[name] for name in selected_area_names if name in kz_areas_dict]
-        search_filters = {
-            "area": selected_area_ids, "employment": ["full"], "experience": experience,
-            "job_search_status": job_search_status, "education_levels": education_levels,
-            "language": languages, "per_page": 20,
-            "user_job_title": user_job_title, "bank_only": bank_only,
-        }
-        st.session_state.hh_search_results = hh.advanced_search_resumes(keywords, search_filters)
     
     if 'hh_search_results' in st.session_state and st.session_state.hh_search_results:
         results = st.session_state.hh_search_results
