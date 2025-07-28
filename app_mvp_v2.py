@@ -3,6 +3,7 @@ from datetime import datetime
 import hh_api_integration_v2 as hh
 from bs4 import BeautifulSoup
 import math
+import streamlit.components.v1 as components
 
 # --- Конфигурация страницы и Стили (сохранены из вашей версии) ---
 st.set_page_config(
@@ -75,6 +76,8 @@ def highlight_snippet(text):
     if not text: return ""
     return text.replace('<highlighttext>', '<mark>').replace('</highlighttext>', '</mark>')
 
+
+
 # --- UI Компоненты ---
 def display_vacancy_card(vacancy):
     with st.container(border=True):
@@ -85,7 +88,7 @@ def display_vacancy_card(vacancy):
                     f'<span style="color: #778DA9; font-size: 0.9em;">📍 {city}</span><br>'
                     f'<span style="color: #778DA9; font-size: 0.9em;">📥 Отклики: {responses_count}</span>'
                     f'</div>', unsafe_allow_html=True)
-        if st.button("Найти кандидатов", key=f"process_hh_{vacancy['id']}", use_container_width=True):
+        if st.button("Перейти к вакансии", key=f"process_hh_{vacancy['id']}", use_container_width=True):
             st.session_state.hh_selected_vacancy_id = vacancy['id']
             st.session_state.structured_keywords = None
             if 'hh_search_results' in st.session_state: del st.session_state.hh_search_results
@@ -137,6 +140,7 @@ def render_home_page_old():
     elif not my_vacancies:
         st.warning("Не найдено активных вакансий в компании.")
 def render_home_page():
+    
     if st.session_state.current_user:
         user = st.session_state.current_user
         #st.markdown(f"### Добро пожаловать, {user.get('first_name', '')} {user.get('last_name', '')}!")
@@ -238,7 +242,6 @@ def render_keyword_extraction_page_old():
         keywords['must_have'] = st.text_input("Обязательные (AND)", ", ".join(keywords.get('must_have', [])), key=f"must_{vacancy_id}").split(',')
         keywords['technologies'] = st.text_input("Технологии (OR)", ", ".join(keywords.get('technologies', [])), key=f"tech_{vacancy_id}").split(',')
         keywords['domain'] = st.text_input("Сфера/Домен (OR)", ", ".join(keywords.get('domain', [])), key=f"domain_{vacancy_id}").split(',')
-        keywords['negative_keywords'] = st.text_input("Минус-слова (NOT)", ", ".join(keywords.get('negative_keywords', [])), key=f"neg_{vacancy_id}").split(',')
         for k in keywords: keywords[k] = [item.strip() for item in keywords[k] if item.strip()]
         st.session_state.structured_keywords = keywords
 
@@ -280,22 +283,6 @@ def render_keyword_extraction_page_old():
             options=['rus', 'kaz', 'eng'], default=[],
             format_func=lambda x: {'rus': 'Русский', 'kaz': 'Казахский', 'eng': 'Английский'}.get(x,x))
 
-
-    if st.button("🚀 Найти кандидатов", use_container_width=True, type="primary"):
-        search_filters = {
-            "area": vacancy_details.get('area', {}).get('id', '160'),
-            "employment": ["full"],
-            "experience": experience,
-            "job_search_status": job_search_status,
-            "education_levels": education_levels,
-            "language": languages, # Добавляем языки
-            "per_page": 20,
-            # Добавляем кастомные поля для передачи в query builder
-            "user_job_title": user_job_title,
-            "bank_only": bank_only,
-        }
-        st.session_state.hh_search_results = hh.advanced_search_resumes(keywords, search_filters, search_mode)
-
     if 'hh_search_results' in st.session_state and st.session_state.hh_search_results:
         results = st.session_state.hh_search_results
         st.markdown(f'<div class="section-header">Найдено резюме: {results.get("found", 0)}</div>', unsafe_allow_html=True)
@@ -314,6 +301,7 @@ def render_keyword_extraction_page_old():
                 with col_r2:
                     #st.markdown(f"<div style='text-align:right;'><span class='stBadge'>Балл: {score}</span></div>", unsafe_allow_html=True)
                     st.link_button("🔗 на HH.ru", resume.get('alternate_url', '#'), use_container_width=True)
+
 def render_keyword_extraction_page():
     vacancy_id = st.session_state.hh_selected_vacancy_id
     vacancy_details = hh.get_vacancy_details(vacancy_id)
@@ -325,6 +313,9 @@ def render_keyword_extraction_page():
         st.session_state.search_page_number = 0
         st.rerun()
 
+    description_html = vacancy_details.get('description', '')
+    cleaned_text, cleaned_html_for_display = hh.clean_vacancy_description(description_html)
+
     col_keywords, col_description = st.columns([6, 5]) # Левая колонка чуть шире
 
     with col_keywords:
@@ -333,16 +324,14 @@ def render_keyword_extraction_page():
         st.caption(f"Требуемый опыт: **{vacancy_details.get('experience', {}).get('name', 'Не указан')}**")
         if st.session_state.structured_keywords is None:
             st.session_state.structured_keywords = hh.generate_keywords_with_openai(
-                vacancy_details.get("name", ""), vacancy_details.get("description", ""))
+                vacancy_details.get("name", ""), cleaned_text)
         keywords = st.session_state.structured_keywords or {}
 
-        st.markdown("#### Шаг 1: Ключевые слова (сгенерировано AI)")
+        st.markdown("#### Шаг 1: Ключевые слова")
         with st.container(border=True):
             st.info("Вы можете отредактировать список слов (разделяйте запятой)")
-            keywords['must_have'] = st.text_input("Обязательные (технологии)", ", ".join(keywords.get('must_have', [])), key=f"must_{vacancy_id}").split(',')
-            keywords['technologies'] = st.text_input("Технологии (дополнительно)", ", ".join(keywords.get('technologies', [])), key=f"tech_{vacancy_id}").split(',')
-            keywords['domain'] = st.text_input("Сфера/Домен", ", ".join(keywords.get('domain', [])), key=f"domain_{vacancy_id}").split(',')
-            keywords['negative_keywords'] = st.text_input("Минус-слова", ", ".join(keywords.get('negative_keywords', [])), key=f"neg_{vacancy_id}").split(',')
+            keywords['must_have'] = st.text_input("Обязательно", ", ".join(keywords.get('must_have', [])), key=f"must_{vacancy_id}").split(',')
+            keywords['optional'] = st.text_input("Дополнительно", ", ".join(keywords.get('optional', [])), key=f"tech_{vacancy_id}").split(',')
             for k in keywords: keywords[k] = [item.strip() for item in keywords[k] if item.strip()]
             st.session_state.structured_keywords = keywords
         
@@ -351,13 +340,11 @@ def render_keyword_extraction_page():
         #st.markdown('<div class="sub-header">Описание вакансии</div>', unsafe_allow_html=True)
         st.markdown("<br><br><br><br><br><br><br><br><br>", unsafe_allow_html=True)
         # ИЗМЕНЕНИЕ: Контейнер с фиксированной высотой и скроллом
-        description_html_content = BeautifulSoup(vacancy_details.get('description', ''), 'html.parser').prettify()
-
+        
         st.markdown(
-            f'<div class="scrollable-container compact-text">{description_html_content}</div>', 
+            f'<div class="scrollable-container compact-text">{cleaned_html_for_display}</div>',
             unsafe_allow_html=True
         )
-        
 
 
     if st.session_state.structured_keywords is None:
@@ -370,7 +357,7 @@ def render_keyword_extraction_page():
     col1, col2 = st.columns([6,5])
     with col1:
         st.markdown("#### Шаг 2: Основные фильтры и режим поиска")
-        search_mode = st.radio("Режим поиска AI-ключевых слов:", ["Строгий", "Средний"], index=1, horizontal=True)
+        #search_mode = st.radio("Режим поиска AI-ключевых слов:", ["Строгий", "Средний"], index=1, horizontal=True)
 
         st.markdown("##### **Точные критерии**")
         user_job_title = st.text_input("Название должности:", placeholder="Например: Java-разработчик")
@@ -411,7 +398,7 @@ def render_keyword_extraction_page():
             "page": page_num # Pass the current page number to the API
         }
         with st.spinner(f"Searching for candidates on page {page_num + 1}..."):
-            st.session_state.hh_search_results = hh.advanced_search_resumes(keywords, search_filters, search_mode)
+            st.session_state.hh_search_results = hh.advanced_search_resumes(keywords, search_filters)
 
     if st.button("🚀 Найти кандидатов", use_container_width=True, type="primary"):
         st.session_state.search_page_number = 0 # Reset to first page on a new search
@@ -424,7 +411,7 @@ def render_keyword_extraction_page():
             "language": languages, "per_page": 20,
             "user_job_title": user_job_title, "bank_only": bank_only,
         }
-        st.session_state.hh_search_results = hh.advanced_search_resumes(keywords, search_filters, search_mode)
+        st.session_state.hh_search_results = hh.advanced_search_resumes(keywords, search_filters)
     
     if 'hh_search_results' in st.session_state and st.session_state.hh_search_results:
         results = st.session_state.hh_search_results
@@ -455,19 +442,21 @@ def render_keyword_extraction_page():
             p_col1, p_col2, p_col3 = st.columns([1, 2, 1])
 
             with p_col1:
-                if st.button("⬅️ Previous", use_container_width=True, disabled=(st.session_state.search_page_number <= 0)):
+                if st.button("⬅️ Пред.", use_container_width=True, disabled=(st.session_state.search_page_number <= 0)):
                     st.session_state.search_page_number -= 1
                     trigger_search(st.session_state.search_page_number)
                     st.rerun()
 
             with p_col2:
-                st.markdown(f"<div style='text-align: center; margin-top: 0.5rem;'>Page {st.session_state.search_page_number + 1} of {total_pages}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align: center; margin-top: 0.5rem;'>Страница {st.session_state.search_page_number + 1} из {total_pages}</div>", unsafe_allow_html=True)
 
             with p_col3:
-                if st.button("Next ➡️", use_container_width=True, disabled=(st.session_state.search_page_number >= total_pages - 1)):
+                if st.button("След. ➡️", use_container_width=True, disabled=(st.session_state.search_page_number >= total_pages - 1)):
                     st.session_state.search_page_number += 1
                     trigger_search(st.session_state.search_page_number)
                     st.rerun()
+
+
 
 # --- Основное приложение ---
 def main():
@@ -487,4 +476,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
