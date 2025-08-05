@@ -392,6 +392,7 @@ def render_keyword_extraction_page():
         selected_area_ids = [kz_areas_dict[name] for name in selected_area_names if name in kz_areas_dict]
         search_filters = {
             "area": selected_area_ids, "employment": ["full"], "experience": experience,
+            "host": "hh.kz",
             "job_search_status": job_search_status, "education_levels": education_levels,
             "language": languages, "per_page": 20,
             "user_job_title": user_job_title, "bank_only": bank_only,
